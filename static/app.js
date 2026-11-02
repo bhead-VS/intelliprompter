@@ -249,26 +249,46 @@
     };
   }
 
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
   function startBrowser() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) throw new Error("this browser has no built-in speech recognition");
-    const rec = new SR();
+    if (!SpeechRec) throw new Error("open this page in Chrome to use built-in speech");
+    const rec = new SpeechRec();
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = "en-US";
+    rec.lang = navigator.language || "en-US";
     let stopped = false;
+    let session = 0;   // result indexes restart each time Chrome restarts recognition
+
+    // Keep whatever was mid-sentence when Chrome cut the session off.
+    const flushPartials = () => {
+      for (const [key, text] of [...state.partials]) {
+        if (key.startsWith(`b${session}-`)) addFinal(text, key);
+      }
+    };
+
     rec.onresult = (e) => {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        const key = `b${i}`;
+        const key = `b${session}-${i}`;
         if (r.isFinal) addFinal(r[0].transcript, key);
         else setPartial(key, r[0].transcript);
       }
     };
-    rec.onerror = (e) => setPill("sttStatus", `STT: ${e.error}`, "err");
-    rec.onend = () => { if (!stopped) rec.start(); };   // Chrome stops after silence
+    rec.onerror = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;   // routine; onend restarts
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") stopped = true;
+      setPill("sttStatus", e.error === "not-allowed" ? "STT: mic blocked — allow it in Chrome" : `STT: ${e.error}`, "err");
+    };
+    rec.onend = () => {   // Chrome ends recognition after silence or ~1 min
+      flushPartials();
+      session++;
+      if (!stopped) {
+        try { rec.start(); } catch { setTimeout(() => !stopped && rec.start(), 250); }
+      }
+    };
     rec.start();
-    setPill("sttStatus", "STT: browser live", "ok");
+    setPill("sttStatus", "STT: Chrome live", "ok");
     return () => { stopped = true; rec.stop(); };
   }
 
@@ -344,7 +364,11 @@
   $("threshold").oninput = (e) => { $("thresholdVal").textContent = Number(e.target.value).toFixed(2); store.set("ip.threshold", e.target.value); };
   $("accessCode").onchange = (e) => store.set("ip.access", e.target.value);
   $("topicsInput").value = store.get("ip.draft", "");
-  $("sttSource").value = store.get("ip.stt", "openai");
+  $("sttSource").value = store.get("ip.stt", "browser");
+  if (!SpeechRec) {
+    $("sttSource").querySelector('option[value="browser"]').textContent = "Chrome built-in (not available in this browser)";
+    setPill("sttStatus", "STT: use Chrome for speech", "err");
+  }
   $("threshold").value = store.get("ip.threshold", "0.7");
   $("thresholdVal").textContent = Number($("threshold").value).toFixed(2);
   $("accessCode").value = store.get("ip.access", "");
@@ -354,6 +378,9 @@
     state.config = cfg;
     $("accessWrap").hidden = !cfg.accessCodeRequired;
     if (!cfg.jevConfigured) setPill("jevStatus", "Jev: no key on server", "err");
-    if (!cfg.openaiConfigured && $("sttSource").value === "openai") $("sttSource").value = "browser";
+    if (!cfg.openaiConfigured) {
+      $("sttSource").querySelector('option[value="openai"]').disabled = true;
+      if ($("sttSource").value === "openai") $("sttSource").value = "browser";
+    }
   }).catch(() => {});
 })();
