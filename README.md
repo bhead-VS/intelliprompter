@@ -57,14 +57,14 @@ Leave that Terminal window open, then open **http://localhost:8765 in Chrome**. 
    `Pricing :: per-sensor annual license, volume discounts`
    Spelling out names and jargon in plain words helps, since speech recognition can mishear product names.
 2. Optionally save it as a named plan (saved in your browser).
-3. Click **Go to cockpit**, then **● Start**, and allow the microphone when Chrome asks.
+3. Click **Open cockpit**, then **Start listening**, and allow the microphone when Chrome asks.
 4. Talk. Each row shows its state:
    - **Blue edge, UP NEXT:** the first topic you haven't covered yet.
    - **Amber:** you're getting close.
    - **Green ✓:** covered.
 
    Click any row to check or uncheck it by hand.
-5. The box at the bottom lets you type sentences instead of speaking, which is handy for a dry run.
+5. **Type instead** (bottom right) lets you type sentences instead of speaking, which is handy for a dry run.
 
 **Settings** has the check-off threshold (default 0.70) and how many seconds of recent speech Jev looks at (default 60).
 
@@ -72,10 +72,10 @@ Leave that Terminal window open, then open **http://localhost:8765 in Chrome**. 
 
 | You see | Fix |
 |---|---|
-| `Jev: no key on server` | The key isn't in `.env`. Add it and restart the server. |
-| `Jev: Jev error 401` | The key is wrong or has extra characters. Paste it again. |
-| `STT: mic blocked` | Click the mic icon in Chrome's address bar, allow it, and reload. |
-| `STT: use Chrome for speech` | You're in Safari or Firefox. Open the page in Chrome. |
+| `Jev no key on server` | The key isn't in `.env`. Add it and restart the server. |
+| `Jev error: TypeSafe returned 401` | The key is wrong or has extra characters. Paste it again. |
+| `Mic blocked` | Click the mic icon in Chrome's address bar, allow it, and reload. |
+| `Use Chrome for speech` | You're in Safari or Firefox. Open the page in Chrome. |
 | Page won't load | The server isn't running. Start it again from Terminal. |
 
 ## Things to know

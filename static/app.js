@@ -94,8 +94,7 @@
         <div>
           <div class="title">${escapeHtml(t.text)}<span class="tag" ${t.id === nextId ? "" : "hidden"}>UP NEXT</span></div>
           ${t.detail ? `<div class="detail">${escapeHtml(t.detail)}</div>` : ""}
-        </div>
-        <div class="meter" title="Jev confidence"><i></i></div>`;
+        </div>`;
       li.onclick = () => { t.done = !t.done; t.manual = true; updateItems(); };
       list.appendChild(li);
     }
@@ -112,7 +111,8 @@
       li.classList.toggle("warm", !t.done && t.score >= WARM_SCORE && t.score < threshold);
       li.classList.toggle("next", t.id === nextId);
       li.querySelector(".tag").hidden = t.id !== nextId;
-      li.querySelector(".meter i").style.width = `${Math.round(t.score * 100)}%`;
+      li.style.setProperty("--p", t.done || t.score < 0.15 ? 0 : t.score);   // hide noise-level slivers
+      li.title = t.done ? "Covered — click to undo" : `Jev confidence ${Math.round(t.score * 100)}%`;
       if (justDone.includes(t.id)) {
         li.classList.remove("just-done");
         void li.offsetWidth;
@@ -120,7 +120,7 @@
       }
     }
     const done = state.topics.filter((t) => t.done).length;
-    $("progress").textContent = `${done} / ${state.topics.length}`;
+    $("progress").textContent = `${done} of ${state.topics.length} covered`;
   }
 
   // ---------- transcript ----------
@@ -155,8 +155,14 @@
     const partial = [...state.partials.values()].map(escapeHtml).join(" ");
     el.innerHTML = finals || partial
       ? `<div>${finals} <span class="partial">${partial}</span></div>`
-      : '<span class="muted">Transcript will stream here…</span>';
+      : '<span>Transcript will stream here…</span>';
   }
+
+  $("simToggle").onclick = () => {
+    $("simForm").hidden = !$("simForm").hidden;
+    $("simToggle").textContent = $("simForm").hidden ? "Type instead" : "Hide typing";
+    if (!$("simForm").hidden) $("simInput").focus();
+  };
 
   $("simForm").onsubmit = (e) => {
     e.preventDefault();
@@ -181,7 +187,7 @@
         topics: pending.map(({ id, text, detail }) => ({ id, text, detail })),
       });
       const ms = Math.round(performance.now() - started);
-      setPill("jevStatus", `Jev: ${ms} ms`, "ok");
+      setPill("jevStatus", `Jev ${ms} ms`);
       const threshold = Number($("threshold").value);
       const justDone = [];
       for (const t of pending) {
@@ -192,7 +198,7 @@
       }
       updateItems(justDone);
     } catch (err) {
-      setPill("jevStatus", `Jev: ${err.message}`, "err");
+      setPill("jevStatus", `Jev error: ${err.message}`, "err");
     } finally {
       state.inFlight = false;
     }
@@ -221,7 +227,7 @@
       }
     };
 
-    ws.onopen = () => setPill("sttStatus", "STT: OpenAI live", "ok");
+    ws.onopen = () => setPill("sttStatus", "Listening (OpenAI)", "ok");
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       switch (msg.type) {
@@ -232,12 +238,12 @@
           addFinal(msg.transcript, msg.item_id);
           break;
         case "error":
-          setPill("sttStatus", `STT: ${msg.error?.message || "error"}`, "err");
+          setPill("sttStatus", `Mic: ${msg.error?.message || "error"}`, "err");
           break;
       }
     };
     ws.onclose = (e) => {
-      if (state.live) setPill("sttStatus", `STT: closed (${e.code})`, "err");
+      if (state.live) setPill("sttStatus", `Mic: closed (${e.code})`, "err");
     };
 
     return () => {
@@ -278,7 +284,7 @@
     rec.onerror = (e) => {
       if (e.error === "no-speech" || e.error === "aborted") return;   // routine; onend restarts
       if (e.error === "not-allowed" || e.error === "service-not-allowed") stopped = true;
-      setPill("sttStatus", e.error === "not-allowed" ? "STT: mic blocked — allow it in Chrome" : `STT: ${e.error}`, "err");
+      setPill("sttStatus", e.error === "not-allowed" ? "Mic blocked — allow it in Chrome" : `Mic: ${e.error}`, "err");
     };
     rec.onend = () => {   // Chrome ends recognition after silence or ~1 min
       flushPartials();
@@ -288,7 +294,7 @@
       }
     };
     rec.start();
-    setPill("sttStatus", "STT: Chrome live", "ok");
+    setPill("sttStatus", "Listening", "ok");
     return () => { stopped = true; rec.stop(); };
   }
 
@@ -301,13 +307,13 @@
     try {
       if (source === "openai") state.stt = await startOpenAI();
       else if (source === "browser") state.stt = startBrowser();
-      else { state.stt = () => {}; setPill("sttStatus", "STT: typing only"); }
+      else { state.stt = () => {}; setPill("sttStatus", "Typing only"); }
       state.live = true;
       state.startedAt = Date.now();
-      $("micBtn").textContent = "■ Stop";
+      $("micBtn").textContent = "Stop";
       $("micBtn").classList.add("live");
     } catch (err) {
-      setPill("sttStatus", `STT: ${err.message}`, "err");
+      setPill("sttStatus", `Mic: ${err.message}`, "err");
     } finally {
       $("micBtn").disabled = false;
     }
@@ -317,9 +323,9 @@
     state.live = false;
     if (state.stt) state.stt();
     state.stt = null;
-    $("micBtn").textContent = "● Start";
+    $("micBtn").textContent = "Start listening";
     $("micBtn").classList.remove("live");
-    setPill("sttStatus", "STT: off");
+    setPill("sttStatus", "Mic off");
   }
 
   $("micBtn").onclick = () => (state.live ? stopLive() : startLive());
@@ -367,7 +373,7 @@
   $("sttSource").value = store.get("ip.stt", "browser");
   if (!SpeechRec) {
     $("sttSource").querySelector('option[value="browser"]').textContent = "Chrome built-in (not available in this browser)";
-    setPill("sttStatus", "STT: use Chrome for speech", "err");
+    setPill("sttStatus", "Use Chrome for speech", "err");
   }
   $("threshold").value = store.get("ip.threshold", "0.7");
   $("thresholdVal").textContent = Number($("threshold").value).toFixed(2);
@@ -377,7 +383,7 @@
   fetch("/api/config").then((r) => r.json()).then((cfg) => {
     state.config = cfg;
     $("accessWrap").hidden = !cfg.accessCodeRequired;
-    if (!cfg.jevConfigured) setPill("jevStatus", "Jev: no key on server", "err");
+    if (!cfg.jevConfigured) setPill("jevStatus", "Jev no key on server", "err");
     if (!cfg.openaiConfigured) {
       $("sttSource").querySelector('option[value="openai"]').disabled = true;
       if ($("sttSource").value === "openai") $("sttSource").value = "browser";

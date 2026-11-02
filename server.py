@@ -92,7 +92,7 @@ async def ask_jev(transcript: str, topics: List[Topic]) -> dict:
         headers={"Authorization": f"Bearer {TYPESAFE_API_KEY}"},
     )
     if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Jev error {resp.status_code}: {resp.text[:300]}")
+        raise HTTPException(status_code=502, detail=f"TypeSafe returned {resp.status_code}: {resp.text[:300]}")
     return resp.json()
 
 
