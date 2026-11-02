@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Intelliprompter</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span>Intelliprompter</div>
+    <div class="stats">
+      <span class="pill" id="progress">0 / 0</span>
+      <span class="pill" id="timer">00:00</span>
+      <span class="pill" id="sttStatus" title="Speech-to-text">STT: off</span>
+      <span class="pill" id="jevStatus" title="Jev topic checker">Jev: idle</span>
+    </div>
+    <div class="actions">
+      <button id="setupBtn" class="ghost">Edit topics</button>
+      <button id="micBtn" class="primary">● Start</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="setup" class="panel setup">
+      <h2>What do you want to talk about?</h2>
+      <p class="hint">One topic per line. Add detail after <code>::</code> to sharpen matching, e.g.
+        <code>Pricing :: per-sensor annual license, volume discounts</code></p>
+      <textarea id="topicsInput" spellcheck="false" placeholder="Intro and why this matters&#10;Customer story :: how Acme cut 2 floors&#10;Pricing :: per-sensor annual license&#10;Next steps and call to action"></textarea>
+
+      <div class="row">
+        <label>Saved plans
+          <select id="planSelect"><option value="">—</option></select>
+        </label>
+        <input id="planName" placeholder="Plan name">
+        <button id="savePlan" class="ghost">Save</button>
+        <button id="deletePlan" class="ghost">Delete</button>
+      </div>
+
+      <details class="settings">
+        <summary>Settings</summary>
+        <div class="grid">
+          <label>Speech-to-text
+            <select id="sttSource">
+              <option value="openai">OpenAI Realtime (gpt-4o-mini-transcribe)</option>
+              <option value="browser">Browser built-in (free, Chrome/Edge)</option>
+              <option value="none">None (type to simulate)</option>
+            </select>
+          </label>
+          <label>Check-off threshold <span id="thresholdVal">0.70</span>
+            <input id="threshold" type="range" min="0.4" max="0.95" step="0.05" value="0.7">
+          </label>
+          <label>Context window (seconds of speech)
+            <input id="windowSecs" type="number" min="15" max="300" value="60">
+          </label>
+          <label id="accessWrap" hidden>Team access code
+            <input id="accessCode" type="password" autocomplete="off">
+          </label>
+        </div>
+      </details>
+
+      <div class="row end">
+        <button id="goBtn" class="primary big">Go to cockpit →</button>
+      </div>
+    </section>
+
+    <section id="cockpit" class="cockpit" hidden>
+      <ol id="checklist" class="checklist"></ol>
+    </section>
+  </main>
+
+  <footer class="ticker">
+    <div id="transcript" class="transcript"><span class="muted">Transcript will stream here…</span></div>
+    <form id="simForm" class="sim">
+      <input id="simInput" placeholder="Type a sentence to simulate speech, then Enter" autocomplete="off">
+    </form>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

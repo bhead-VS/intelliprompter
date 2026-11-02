@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "intelliprompter",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "MOCK_JEV=${MOCK_JEV:-1} .venv/bin/uvicorn server:app --port 8765"],
+      "port": 8765
+    }
+  ]
+}
