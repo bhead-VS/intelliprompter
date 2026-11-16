@@ -22,11 +22,53 @@
   };
 
   // ---------- topics & plans ----------
+  // A line ending in ":" (or followed by indented / bulleted lines) becomes a group heading;
+  // the lines under it are its sub-items until a blank line. One level of nesting only.
+  const BULLET = /^[-*•]\s+/;
+  function splitDetail(line) {
+    const [text, ...rest] = line.split("::");
+    return { text: text.trim(), detail: rest.join("::").trim() || null };
+  }
+
   function parseTopics(raw) {
-    return raw.split("\n").map((l) => l.trim()).filter(Boolean).map((line, i) => {
-      const [text, ...rest] = line.split("::");
-      return { id: `t${i}`, text: text.trim(), detail: rest.join("::").trim() || null, done: false, score: 0 };
-    });
+    const items = [];
+    let group = null;   // current heading item, or null
+    let mode = null;    // "colon": unindented lines join the group; "indent": only indented/bulleted ones do
+    let last = null;    // last top-level item (may be promoted to a heading by indented lines)
+    let n = 0;
+    const make = (line) => ({ id: `t${n++}`, ...splitDetail(line), done: false, score: 0, parent: null, children: [] });
+
+    for (const rawLine of raw.split("\n")) {
+      if (!rawLine.trim()) { group = null; mode = null; last = null; continue; }
+      const nested = /^\s+/.test(rawLine) || BULLET.test(rawLine.trim());
+      const line = rawLine.trim().replace(BULLET, "");
+      const { text } = splitDetail(line);
+
+      if (nested && !group && last) { group = last; mode = "indent"; }
+      if (group && (nested || (mode === "colon" && !text.endsWith(":")))) {
+        const child = make(line);
+        child.parent = group.id;
+        group.children.push(child.id);
+        items.push(child);
+        continue;
+      }
+      const item = make(line);
+      if (item.text.endsWith(":")) {
+        item.text = item.text.replace(/:+$/, "").trim();
+        group = item; mode = "colon";
+      } else { group = null; mode = null; }
+      last = item;
+      items.push(item);
+    }
+    return items;
+  }
+
+  const byId = (id) => state.topics.find((t) => t.id === id);
+  const isGroup = (t) => t.children.length > 0;
+  const leaves = () => state.topics.filter((t) => !isGroup(t));
+  const kids = (g) => g.children.map(byId);
+  function syncGroups() {
+    for (const g of state.topics.filter(isGroup)) g.done = kids(g).every((c) => c.done);
   }
 
   function refreshPlanSelect() {
@@ -81,46 +123,92 @@
   $("goBtn").onclick = showCockpit;
   $("setupBtn").onclick = () => { if (state.live) stopLive(); showSetup(); };
 
+  function itemHtml(t) {
+    const count = isGroup(t)
+      ? `<span class="count"></span><button class="chev" type="button" aria-label="Collapse or expand">▾</button>` : "";
+    return `
+        <div class="box">✓</div>
+        <div class="body">
+          <div class="title">${escapeHtml(t.text)}<span class="tag" hidden>UP NEXT</span></div>
+          ${t.detail ? `<div class="detail">${escapeHtml(t.detail)}</div>` : ""}
+          ${isGroup(t) ? `<div class="bar"><span></span></div>` : ""}
+        </div>${count}`;
+  }
+
   function renderChecklist() {
     const list = $("checklist");
     list.innerHTML = "";
-    const nextId = state.topics.find((t) => !t.done)?.id;
-    for (const t of state.topics) {
+    for (const t of state.topics.filter((x) => !x.parent)) {
       const li = document.createElement("li");
-      li.className = "item";
-      li.dataset.id = t.id;
-      li.innerHTML = `
-        <div class="box">✓</div>
-        <div>
-          <div class="title">${escapeHtml(t.text)}<span class="tag" ${t.id === nextId ? "" : "hidden"}>UP NEXT</span></div>
-          ${t.detail ? `<div class="detail">${escapeHtml(t.detail)}</div>` : ""}
-        </div>`;
-      li.onclick = () => { t.done = !t.done; t.manual = true; updateItems(); };
+      const row = document.createElement("div");
+      row.className = "item";
+      row.dataset.id = t.id;
+      row.innerHTML = itemHtml(t);
+      li.appendChild(row);
+      if (!isGroup(t)) {
+        row.onclick = () => { t.done = !t.done; t.manual = true; updateItems(); };
+      } else {
+        li.className = "group";
+        row.classList.add("group-head");
+        row.onclick = () => {
+          const target = !t.done;   // tick the heading = finish (or reopen) the whole group
+          for (const c of kids(t)) { c.done = target; c.manual = true; }
+          updateItems();
+        };
+        row.querySelector(".chev").onclick = (e) => {
+          e.stopPropagation();
+          t.collapsed = !t.collapsed;
+          li.classList.toggle("collapsed", t.collapsed);
+        };
+        const ul = document.createElement("ul");
+        ul.className = "children";
+        for (const c of kids(t)) {
+          const cli = document.createElement("li");
+          cli.className = "item child";
+          cli.dataset.id = c.id;
+          cli.innerHTML = itemHtml(c);
+          cli.onclick = () => { c.done = !c.done; c.manual = true; updateItems(); };
+          ul.appendChild(cli);
+        }
+        li.appendChild(ul);
+      }
       list.appendChild(li);
     }
     updateItems();
   }
 
   function updateItems(justDone = []) {
+    syncGroups();
     const threshold = Number($("threshold").value);
-    const nextId = state.topics.find((t) => !t.done)?.id;
+    const nextId = leaves().find((t) => !t.done)?.id;
+    const nextGroup = nextId && byId(nextId).parent;
     for (const t of state.topics) {
-      const li = document.querySelector(`.item[data-id="${t.id}"]`);
-      if (!li) continue;
-      li.classList.toggle("done", t.done);
-      li.classList.toggle("warm", !t.done && t.score >= WARM_SCORE && t.score < threshold);
-      li.classList.toggle("next", t.id === nextId);
-      li.querySelector(".tag").hidden = t.id !== nextId;
-      li.style.setProperty("--p", t.done || t.score < 0.15 ? 0 : t.score);   // hide noise-level slivers
-      li.title = t.done ? "Covered — click to undo" : `Jev confidence ${Math.round(t.score * 100)}%`;
+      const el = document.querySelector(`.item[data-id="${t.id}"]`);
+      if (!el) continue;
+      el.classList.toggle("done", t.done);
+      if (isGroup(t)) {
+        const cs = kids(t), d = cs.filter((c) => c.done).length;
+        el.classList.toggle("next", t.id === nextGroup);
+        el.querySelector(".count").textContent = `${d} / ${cs.length}`;
+        el.querySelector(".bar span").style.width = `${(d / cs.length) * 100}%`;
+        el.style.setProperty("--p", t.done ? 0 : d / cs.length);
+        el.title = t.done ? "All covered — click to reopen the group" : "Click to mark the whole group covered";
+        if (justDone.some((id) => byId(id).parent === t.id) && t.done) justDone.push(t.id);
+      } else {
+        el.classList.toggle("warm", !t.done && t.score >= WARM_SCORE && t.score < threshold);
+        el.classList.toggle("next", t.id === nextId);
+        el.querySelector(".tag").hidden = t.id !== nextId;
+        el.style.setProperty("--p", t.done || t.score < 0.15 ? 0 : t.score);   // hide noise-level slivers
+        el.title = t.done ? "Covered — click to undo" : `Jev confidence ${Math.round(t.score * 100)}%`;
+      }
       if (justDone.includes(t.id)) {
-        li.classList.remove("just-done");
-        void li.offsetWidth;
-        li.classList.add("just-done");
+        el.classList.remove("just-done");
+        void el.offsetWidth;
+        el.classList.add("just-done");
       }
     }
-    const done = state.topics.filter((t) => t.done).length;
-    $("progress").textContent = `${done} of ${state.topics.length} covered`;
+    const all = leaves();
+    $("progress").textContent = `${all.filter((t) => t.done).length} of ${all.length} covered`;
   }
 
   // ---------- transcript ----------
@@ -173,10 +261,18 @@
   };
 
   // ---------- Jev checking loop ----------
+  // Sub-items carry their heading as context, so a short line still matches the right thing.
+  function jevTopic({ id, text, detail, parent }) {
+    const g = parent && byId(parent);
+    if (!g) return { id, text, detail };
+    const ctx = g.detail ? `${g.text} (${g.detail})` : g.text;
+    return { id, text, detail: (detail ? `${ctx} — ${detail}` : ctx).slice(0, 1000) };
+  }
+
   async function checkLoop() {
     if (state.inFlight || $("cockpit").hidden) return;
     const text = windowText();
-    const pending = state.topics.filter((t) => !t.done);
+    const pending = leaves().filter((t) => !t.done);
     if (!text || text === state.lastCheckedText || !pending.length) return;
     state.inFlight = true;
     state.lastCheckedText = text;
@@ -184,7 +280,7 @@
     try {
       const res = await api("/api/check", {
         transcript: text,
-        topics: pending.map(({ id, text, detail }) => ({ id, text, detail })),
+        topics: pending.map(jevTopic),
       });
       const ms = Math.round(performance.now() - started);
       setPill("jevStatus", `Jev ${ms} ms`);

@@ -116,11 +116,11 @@ main { flex: 1; overflow: auto; padding: 56px 24px; }
   align-items: start;
   gap: 18px;
   padding: 22px 4px;
-  border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: opacity .4s;
 }
-.item:first-child { border-top: 1px solid var(--line); }
+.checklist > li { border-bottom: 1px solid var(--line); }
+.checklist > li:first-child { border-top: 1px solid var(--line); }
 .item .box {
   width: 22px; height: 22px; margin-top: 6px;
   border-radius: 50%;
@@ -142,6 +142,28 @@ main { flex: 1; overflow: auto; padding: 56px 24px; }
 .item.done .title { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: var(--faint); }
 .item.just-done .box { animation: fill .45s ease; }
 @keyframes fill { 0% { box-shadow: 0 0 0 0 var(--accent-soft); } 100% { box-shadow: 0 0 0 10px transparent; } }
+
+/* groups: heading row + indented sub-items */
+.group-head { grid-template-columns: 28px 1fr auto auto; }
+.group-head .title { color: var(--text); font-weight: 600; }
+.group-head .count { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.group-head .chev {
+  margin-top: 2px; width: 32px; height: 32px; border: 0; border-radius: var(--radius);
+  background: transparent; color: var(--faint); font-size: 16px; cursor: pointer; transition: transform .15s, background .15s;
+}
+.group-head .chev:hover { background: var(--subtle); color: var(--text); }
+.group.collapsed .chev { transform: rotate(-90deg); }
+.group-head .bar { height: 3px; margin-top: 10px; max-width: 220px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.group-head .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.group-head.done .bar { display: none; }
+.group-head.done { opacity: .45; }
+
+.children { list-style: none; margin: -8px 0 16px 14px; padding: 0 0 0 28px; border-left: 2px solid var(--line); }
+.group.collapsed .children { display: none; }
+.item.child { padding: 10px 4px; gap: 14px; grid-template-columns: 22px 1fr; }
+.item.child .box { width: 18px; height: 18px; margin-top: 4px; font-size: 10px; }
+.item.child .title { font-size: clamp(16px, 2vw, 21px); }
+.item.child.done { opacity: .5; }
 
 .tag { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-left: 10px; vertical-align: 4px; }
 
